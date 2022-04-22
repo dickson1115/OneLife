@@ -1,0 +1,14 @@
+{
+  "ExpandedNodes": [
+    "",
+<<<<<<< HEAD
+    "\\photoServer"
+  ],
+  "SelectedNode": "\\photoServer\\passwordHashUtility.php",
+=======
+    "\\build\\win32"
+  ],
+  "SelectedNode": "\\server",
+>>>>>>> 0ca8ff83027943eedadb0134c81bb06fdd92436c
+  "PreviewInSolutionExplorer": false
+}

@@ -6386,50 +6386,6 @@ static void holdingSomethingNew( LiveObject *inPlayer,
         else {
             inPlayer->holdingFlightObject = false;
             }
-
-        if( o->giveClue ) {
-            
-            char *contMixed = 
-                SettingsManager::getSettingContents( "secretMessage" );
-            char *cont = stringToUpperCase( contMixed );
-            
-            delete [] contMixed;
-
-            int contLen = strlen( cont );
-
-            if( clueIndicesLeftToGive.size() == 0 ) {
-                // all have been given (or this is our first clue)
-                // refill with valid indices
-                for( int i=0; i<contLen; i++ ) {
-                    if( cont[i] != ' ' 
-                         &&
-                        cont[i] != '\n' ) {
-                        clueIndicesLeftToGive.push_back( i );
-                        }
-                    }
-                }
-            
-            
-            if( clueIndicesLeftToGive.size() > 0 ) {
-                int i = 
-                    randSource.getRandomBoundedInt( 
-                        0, 
-                        clueIndicesLeftToGive.size() - 1 );
-
-                int letterPick = clueIndicesLeftToGive.getElementDirect( i );
-                clueIndicesLeftToGive.deleteElement( i );
-                
-                char *message = 
-                    autoSprintf( 
-                        "ANOTHER NECK HAS MET YOUR SWORD.**"
-                        "ANOTHER CLUE (I KEEP MY WORD):  %d : %c",
-                        letterPick + 1, cont[letterPick] );
-                
-                sendGlobalMessage( message, inPlayer );
-                delete [] message;
-                }
-            delete [] cont;
-            }
         }
     else {
         inPlayer->holdingFlightObject = false;
@@ -10731,6 +10687,11 @@ static void processWaitingTwinConnection( FreshConnection inConnection ) {
                 delete [] inConnection.twinCode;
                 inConnection.twinCode = NULL;
                 }
+            if( inConnection.ipAddress != NULL ) {
+                delete [] inConnection.ipAddress;
+                inConnection.ipAddress = NULL;
+                }
+            
             nextLogInTwin = false;
             return;
             }
@@ -10845,7 +10806,14 @@ static void processWaitingTwinConnection( FreshConnection inConnection ) {
                 strcmp( nextConnection->twinCode, twinCode ) == 0 ) {
                 
                 delete [] nextConnection->twinCode;
-                waitingForTwinConnections.deleteElement( i );
+                
+                if( nextConnection->ipAddress != NULL ) {
+                    delete [] nextConnection->ipAddress;
+                    nextConnection->ipAddress = NULL;
+                    }
+
+                waitingForTwinConnections.deleteElement( i );                
+
                 i--;
                 }
             }
@@ -13908,6 +13876,7 @@ static void interruptAnyKillEmots( int inPlayerID,
 
 
 static void setPerpetratorHoldingAfterKill( LiveObject *nextPlayer,
+                                            LiveObject *hitPlayer,
                                             TransRecord *woundHit,
                                             TransRecord *rHit,
                                             TransRecord *r ) {
@@ -13929,6 +13898,86 @@ static void setPerpetratorHoldingAfterKill( LiveObject *nextPlayer,
         // specified in wound trans
         nextPlayer->holdingID = 
             woundHit->newActor;
+
+        
+        if( nextPlayer->holdingID > 0 && hitPlayer != NULL ) {
+            if( getObject( nextPlayer->holdingID )->giveClue ) {
+                
+                char newVictimEmot = false;
+                
+                if( woundHit->newTarget > 0 ) {
+                    ForcedEffects e = 
+                        checkForForcedEffects( woundHit->newTarget );
+                    if( e.emotIndex > 0 && 
+                        e.ttlSec == -1 ) {
+                        // permanent emot specified
+                        // make sure player doesn't already have this
+                        // emot in place
+                        if( hitPlayer->
+                            permanentEmots.getElementIndex( e.emotIndex )
+                            == -1 ) {
+                            newVictimEmot = true;
+                            }
+                        }
+                    }
+                
+                if( newVictimEmot ) {
+                
+                    char *contMixed = 
+                        SettingsManager::getSettingContents( "secretMessage" );
+                    char *cont = stringToUpperCase( contMixed );
+            
+                    delete [] contMixed;
+                    
+                    int contLen = strlen( cont );
+                    
+                    if( clueIndicesLeftToGive.size() == 0 ) {
+                        // all have been given (or this is our first clue)
+                        // refill with valid indices
+                        for( int i=0; i<contLen; i++ ) {
+                            if( cont[i] != ' ' 
+                                &&
+                                cont[i] != '\n' ) {
+                                clueIndicesLeftToGive.push_back( i );
+                                }
+                            }
+                        }
+                    
+                    
+                    if( clueIndicesLeftToGive.size() > 0 ) {
+                        int i = 
+                            randSource.getRandomBoundedInt( 
+                                0, 
+                                clueIndicesLeftToGive.size() - 1 );
+                        
+                        int letterPick = 
+                            clueIndicesLeftToGive.getElementDirect( i );
+                        clueIndicesLeftToGive.deleteElement( i );
+                        
+                        char *message = 
+                            autoSprintf( 
+                                "ANOTHER NECK HAS MET YOUR SWORD.**"
+                                "ANOTHER CLUE (I KEEP MY WORD):  %d : %c",
+                                letterPick + 1, cont[letterPick] );
+                        
+                        sendGlobalMessage( message, nextPlayer );
+                        delete [] message;
+                        }
+                    delete [] cont;
+                    }
+                else {
+                    char *message = 
+                        autoSprintf( 
+                            "THAT NECK WAS 'READY CUT IN TWO.**"
+                            "FIND MORE FRESH NECKS TO EARN YOUR CLUE." );
+                    
+                    sendGlobalMessage( message, nextPlayer );
+                    delete [] message;
+                    }
+                }
+            }
+        
+
         holdingSomethingNew( nextPlayer,
                              oldHolding );
         }
@@ -14189,6 +14238,7 @@ void executeKillAction( int inKillerIndex,
                             getPTrans( nextPlayer->holdingID, 0 );
 
                         setPerpetratorHoldingAfterKill( nextPlayer,
+                                                        hitPlayer,
                                                         woundHit, rHit, r );
                         
                         ForcedEffects e = 
@@ -14437,7 +14487,8 @@ void executeKillAction( int inKillerIndex,
 
                 int oldHolding = nextPlayer->holdingID;
 
-                setPerpetratorHoldingAfterKill( nextPlayer, 
+                setPerpetratorHoldingAfterKill( nextPlayer,
+                                                hitPlayer,
                                                 woundHit, rHit, r );
 
                 // if they are moving, end their move NOW
@@ -18082,8 +18133,6 @@ int main() {
                     delete [] nextConnection->clientTag;
                     nextConnection->clientTag = NULL;
                     
-                    delete [] nextConnection->ipAddress;
-                    nextConnection->ipAddress = NULL;
 
                     if( nextConnection->twinCode != NULL
                         && 
@@ -18095,7 +18144,12 @@ int main() {
                             delete [] nextConnection->twinCode;
                             nextConnection->twinCode = NULL;
                             }
-                                
+
+                        if( nextConnection->ipAddress != NULL ) {
+                            delete [] nextConnection->ipAddress;
+                            nextConnection->ipAddress = NULL;
+                            }
+                        
                         processLoggedInPlayer( 
                             nextConnection->reconnectOnly ? 2 : true,
                             nextConnection->sock,
@@ -18368,6 +18422,13 @@ int main() {
                                             delete [] nextConnection->twinCode;
                                             nextConnection->twinCode = NULL;
                                             }
+                                        if( nextConnection->ipAddress
+                                            != NULL ) {
+                                            delete []
+                                                nextConnection->ipAddress;
+                                            nextConnection->ipAddress = NULL;
+                                            }
+                                        
                                         processLoggedInPlayer(
                                             nextConnection->reconnectOnly ? 
                                             2 : true,
@@ -19095,6 +19156,13 @@ int main() {
                                 allow = true;
                                 break;
                                 }
+                            else if( strcmp(
+                                         "*",
+                                         list->getElementDirect( i ) ) == 0 ) {
+                                // wildcard present in settings file
+                                allow = true;
+                                break;
+                                }
                             }
                         
                         list->deallocateStringElements();
@@ -19162,6 +19230,13 @@ int main() {
                         players.size() > 1 ) {
 
                         nextPlayer->vogJumpIndex--;
+
+                        // if several people have died since last VOGP
+                        // sent by this player, their vogJumpIndex can
+                        // be out of bounds
+                        if( nextPlayer->vogJumpIndex >= players.size() ) {
+                            nextPlayer->vogJumpIndex = players.size() - 1;
+                            }
 
                         if( nextPlayer->vogJumpIndex == i ) {
                             nextPlayer->vogJumpIndex--;
@@ -26957,7 +27032,10 @@ int main() {
                         // a new permanent emot
                         LiveObject *pO = getLiveObject( pID );
                         if( pO != NULL ) {
-                            pO->permanentEmots.push_back( eInd );
+                            if( pO->permanentEmots.getElementIndex( eInd ) ==
+                                -1 ) {
+                                pO->permanentEmots.push_back( eInd );
+                                }
                             }
                         }
                         
